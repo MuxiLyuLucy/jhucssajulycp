@@ -5,7 +5,7 @@ import json
 import ipdb
 
 
-ndef log_info(df):
+def log_info(df):
     # log out the information
     print('Current status:')
     print(f'Total remained: {len(df)}')
