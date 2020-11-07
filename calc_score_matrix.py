@@ -78,12 +78,12 @@ def score(index1, index2, df):
         if df1['学校'] == df2['学校']:
             score += 10
         else:
-            score -= undecided_score
+            return -2
     elif df1['希望CP与自己同校吗'] == "不同校":
         if df1['学校'] != df2['学校']:
             score += 10
         else:
-            score -= undecided_score
+            return -2
     else:
         score += undecided_score
 
@@ -115,7 +115,10 @@ def score(index1, index2, df):
         else:
             matched = True
             break
-    score += undecided_score if matched else -undecided_score
+    if matched:
+        score += undecided_score
+    else:
+        return -2
     return score
 
 parser = argparse.ArgumentParser()
