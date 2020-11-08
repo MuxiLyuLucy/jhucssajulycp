@@ -1,119 +1,133 @@
-import pandas as pd
-import argparse
+import argparse, json 
+import pandas as pd 
+import numpy as np
 from tabulate import tabulate
-import json
-import ipdb
+from gs import Gale_Shapley
 
+name = '姓名/昵称'
+gdr = '性别'
+g_pref = '意向CP性别'
+short_info_headers = [0,1,2,3,4,5,6,7,8,9]
 
-def log_info(df):
-    # log out the information
-    print('Current status:')
-    print(f'Total remained: {len(df)}')
-    print(f"# Male: {len(df[df['性别'] == '男生'])}, # Female: {len(df[df['性别'] == '女生'])}")
-    return None
+def print_short_info(idxes, df):
+    print(tabulate(df.iloc[idxes, short_info_headers], headers='keys', tablefmt='psql'))
 
+def priority_pairing(df, scores):
+    normal_cand_idxes = list(df[df['是否优先'] == 0].index)
+    print('共{}个需要优先匹配的对象'.format(len(normal_cand_idxes)))
+    p_scores = np.array(scores)
+    p_scores[normal_cand_idxes] = -2 * np.ones(p_scores[normal_cand_idxes].shape)
+    p_pairs = Gale_Shapley(p_scores)
+    paired_idxes = np.array(p_pairs).flatten()
+    scores[paired_idxes, :] = -2
+    scores[:, paired_idxes] = -2
+    return p_pairs
 
-def print_short_info(index, df):
-    print(tabulate(df.iloc[index, [0, 3, 4, 5, 6, 7, 8, 9, 10, 12]], headers='keys', tablefmt='psql'))
-    return None
+def normal_pairing(scores):
+    n_pairs = Gale_Shapley(scores)
+    paired_idxes = np.array(n_pairs).flatten()
+    scores[paired_idxes, :] = -2
+    scores[:, paired_idxes] = -2
+    return n_pairs
 
+def manual_pairing(args, df, scores, unpaired_idxes, pairs):
+    print('手动匹配:')
+    stop_pairing = False
+    while len(unpaired_idxes) > 0:
+        candidates_list = get_candidates(unpaired_idxes, df)
 
-def make_cand_list(df, scores):
-    # make a candidate list, list of list, element is list of index
-    cand_list = []
-    for i in range(len(df)):
-        index1 = df['序号'][i]
-        gender = df['性别'][i]
-        cand_index = []
-        if df['我想匹配'][i] == '不限':
-            df_cand = df[df['序号'] != index1]
-            if gender == '男生':
-                df_cand = df_cand[df_cand['我想匹配'] != '小姐姐']
-            elif gender == '女生':
-                df_cand = df_cand[df_cand['我想匹配'] != '小哥哥']
+        # Check if there's possibe couples left
+        cand_sum = 0
+        for _, candidates in candidates_list.items():
+            cand_sum += len(candidates)
+        if cand_sum == 0:
+            print('无剩余可匹配cp')
+            return
+
+        # Get first candidate
+        while True:
+            idx1 = input_idx(unpaired_idxes,'请输入第一个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', 'q')
+            if idx1 < 0:
+                return
+            elif len(candidates_list[idx1]) == 0:
+                print("所选对象无可匹配的候选人!")
             else:
-                raise ValueError('!')
-        elif df['我想匹配'][i] == '小哥哥':
-            df_cand = df[df['序号'] != index1]
-            df_cand = df_cand[df_cand['性别'] == '男生']
-            if gender == '男生':
-                df_cand = df_cand[df_cand['我想匹配'] != '小姐姐']
-            elif gender == '女生':
-                df_cand = df_cand[df_cand['我想匹配'] != '小哥哥']
-            else:
-                raise ValueError('!')
-        elif df['我想匹配'][i] == '小姐姐':
-            df_cand = df[df['序号'] != index1]
-            df_cand = df_cand[df_cand['性别'] == '女生']
-            if gender == '男生':
-                df_cand = df_cand[df_cand['我想匹配'] != '小姐姐']
-            elif gender == '女生':
-                df_cand = df_cand[df_cand['我想匹配'] != '小哥哥']
-            else:
-                raise ValueError('!')
-        else:
-            raise ValueError('!')
-        for index2 in list(df_cand['序号']):
-            cand_index.append((index2, scores[index1][index2]))
-        cand_index.sort(key=lambda x: x[1], reverse=True)
-        cand_list.append(cand_index)
-    return cand_list
+                break
+        
+        if stop_pairing:
+            break
+        
+        # Get second candidate
+        print('已选对象(第一行)及其可匹配对象:')
+        candidates = candidates_list[idx1]
+        print_short_info([idx1] + candidates, df)
+        idx2 = input_idx(candidates,'请输入第二个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', 'q')
+        if idx2 < 0:
+            return
+
+        # Update result and the unpaired 
+        pairs += [(idx1, idx2)]
+        unpaired_idxes.remove(idx1)
+        unpaired_idxes.remove(idx2)        
+
+        # Save result
+        while True:
+            user_input = input('是否保存结果？y/n: ')
+            if user_input == 'y':
+                save_result(args.output, pairs, df)
+                break
+            elif user_input == 'n':
+                break
 
 
-def print_first(df, scores):
-    # calcaulate the possible pairs and reccomend 
-    # the ones refered
-    # the ones with less candidates first
-    cand_list = make_cand_list(df, scores)
-    cand_num_list = [(i, len(cand_list[i])) for i in range(len(cand_list))]
-    cand_num_list.sort(key=lambda x: x[1])
-    index = []
-    for i in range(5):
-        index.append(cand_num_list[i][0])
-    print_short_info(index, df)
-    return cand_list
+def get_candidates(unpaired_idxes, df):
+    candidates_list = {}
+    for idx1 in unpaired_idxes:
+        candiates = []
+        for idx2 in unpaired_idxes:
+            if idx1 == idx2:
+                continue
+            p1, p2 = df.iloc[idx1], df.iloc[idx2]
+            if((p1[g_pref]=='不限' or p1[g_pref]==p2[gdr]) and (p2[g_pref]=='不限' or p2[g_pref]==p1[gdr])):
+                candiates.append(idx2)
+        candidates_list[idx1] = candiates
 
+    candidates_info = []
+    for idx, candidates in candidates_list.items():
+        candidates_info.append([idx,df.loc[idx, name], len(candidates)])
+    print('剩余可选择的未匹配对象:')
+    print(tabulate(candidates_info, headers = ['', name, '可匹配对象个数']))
 
-def rec_candidate(df, cand_list, times):
-    # Give 5 condidate information for the query
-    try:
-        index = list(range(times*5, times*5+5))
-        index = [cand_list[i][0] for i in index]
-    except:
-        index = list(range(times*5, len(cand_list)))
-        index = [cand_list[i][0] for i in index]
-    print_short_info(index, df)
-    return None
+    return candidates_list
 
-
-def cross_out(index, df_clean):
-    # Cross out the paried candidates
-    df_clean = df_clean[df_clean['序号'] != index]
-    df_clean.reset_index(drop=True, inplace=True)
-    return df_clean
-
-
-# def log_personal_information(index, df, output_file):
-#     # log out the personal information
-#     df_temp = df.iloc[list(index), :].T
-#     print(tabulate(df_temp, headers='keys', tablefmt='psql'), file=output_file)
-#     return None
-
-def log_personal_information(i, index, df, output_file):
-    # log out the personal information
-    df_temp = df.iloc[list(index), :]
-    df_temp.reset_index(inplace=True, drop=True)
-    print(f"{i:>5} {df_temp['姓名'][0]:>20}: {df_temp['本人微信号'][0]:>20} {df_temp['姓名'][1]:>20}: {df_temp['本人微信号'][1]:>20}", 
-            file=output_file)
-    return None
-
-
-if __name__ == "__main__":
     
+def input_idx(valid_vals, prompt_msg, stop_msg, stop_signal = None):
+    while True:
+        user_input = input(prompt_msg)
+        if(user_input == stop_signal):
+            print(stop_msg)
+            # return an invalud idx when input is stop signal
+            return -1
+        try: 
+            i = int(user_input)
+        except ValueError:
+            print('无效输入！')
+            continue
+        if i not in valid_vals:
+            print("无效序号!")    
+        else:
+            return i
+
+def save_result(output_file, pairs, df):
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for p in pairs:
+            f.write(df.loc[p[0], name] + ' ' + df.loc[p[1], name] + '\n')
+    print('已保存配对结果于{}'.format(output_file))
+
+def main():
     # Parser arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-io', '--input_original', help='The original excel file containing the data')
-    parser.add_argument('-ic', '--input_clean', help='The clean excel file')
+    parser.add_argument('-ic', '--input_clean', default='./data.xlsx', help='The    clean excel file')
     parser.add_argument('-s', '--score_matrix', default='./score_matrix.json',
             help='The score matrix file')
     parser.add_argument('-o', '--output', default='./output.txt', 
@@ -122,94 +136,24 @@ if __name__ == "__main__":
 
     # Process the data
     df = pd.read_excel(args.input_clean)
-    df_orig = pd.read_excel(args.input_original)
     with open(args.score_matrix) as f:
-        scores = json.load(f)
-    log_info(df)  # Log
-
-    # list inviters and programmer
-    inviter = list(df['邀请人'])
-    priority = []
-    priority.append(44)
-    for name in set(inviter):
-        if name in list(df['姓名']):
-            df_temp = df[df['姓名'] == name]
-            priority.append(df_temp['序号'].values[0])
-    
-    # Start to pair
+        scores = np.array(json.load(f))
     pairs = []
-    while True:
-        # Give candidates
-        cand_list = print_first(df, scores)
-        if len(priority) != 0:
-            print('The inviters or programmers are still remained single! Their index/indices:')
-            print(priority)
 
-        while True:
-            try:
-                index1 = int(input('Please input the index of query candidate:'))
-            except:
-                if index2 == 'save':
-                    df.to_excel('./temp.xlsx')
-                    with open(args.output, 'wt') as f:
-                        for i in range(len(pairs)):
-                            log_personal_information(i, pairs[i], df_orig, f)
-                    print('Have saved the current state. To exit, press ctrl+c')
-                    break
-
-            if index1 in list(df['序号']):
-                break
-            else:
-                print('This candidate has been crossed out or does not exit, please select another one.')
-
-        # Give recommendations
-        i = 0
-        while True:
-            print_short_info([index1], df_orig)
-            df_temp = df[df['序号'] == index1]
-            index_temp = df_temp.index[0]
-            rec_candidate(df_orig, cand_list[index_temp], i)
-            index2 = input('Please select the pair for the candidate, press ENTER to view next, press q to go back, and type "save" to save temperary file:')
-            try:
-                index2 = int(index2)
-                if index2 in list(df['序号']):
-                    break
-                else:
-                    print('This candidate has been crossed out or does not exit, please select another one.')
-            except:
-                if index2 == '':
-
-                    if i < int(len(cand_list[index1]) / 5):
-                        i += 1
-                    else:
-                        print('This is the last page')
-                elif index2 == 'q':
-                    i -= 1
-                elif index2 == 'save':
-                    df.to_excel('./temp.xlsx')
-                    with open(args.output, 'wt') as f:
-                        for i in range(len(pairs)):
-                            log_personal_information(i, pairs[i], df_orig, f)
-                    print('Have saved the current state. To exit, press ctrl+c')
-                else:
-                    print('Sorry, cannot recognize this input.')
-
-        # Cross out and update  # Log
-        df = cross_out(index2, df)
-        df = cross_out(index1, df)
-        if index1 in priority:
-            priority.remove(index1)
-        if index2 in priority:
-            priority.remove(index2)
-        log_info(df)  # Log
-        pairs.append((index1, index2))
-
-        # Finish?
-        if (len(df[df['性别'] == '男生']) == 0) or (len(df[df['性别'] == '女生']) == 0):
-            break
-        
-    # Write the result
-    with open(args.output, 'wt') as f:
-        for i in range(len(pairs)):
-            log_personal_information(i, pairs[i], df_orig, f)
-
+    # Priority pairs
+    pairs += priority_pairing(df, scores)
+    print('优先匹配cp共{}对'.format(len(pairs)))
+    # Normal pairs
+    pairs += normal_pairing(scores)
+    print('自动匹配cp共{}对'.format(len(pairs)))
+    save_result(args.output, pairs, df)
+    # Manual pairing
+    unpaired_idxes = set(np.arange(len(scores))) - set(np.array(pairs).flatten())
+    manual_pairing(args, df, scores, unpaired_idxes, pairs)
+               
+    save_result(args.output, pairs, df) 
+    print('剩余未匹配对象:')
+    print_short_info(list(unpaired_idxes), df)
+            
+if __name__ == "__main__":
+    main()

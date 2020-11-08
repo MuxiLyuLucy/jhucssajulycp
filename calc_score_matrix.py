@@ -2,31 +2,31 @@ import pandas as pd
 import argparse
 import json
 from tqdm import tqdm
+from tabulate import tabulate
 
 def score(index1, index2, df):
     df1 = df.iloc[index1]
     df2 = df.iloc[index2]
     score = 0
-
     undecided_score = 1
 
-    if df1['意向CP性别'] != df2['性别']:
+    if df1['意向CP性别'] != df2['性别'] and df1['意向CP性别'] != '不限':
         return -2
-    
+
     if df1['希望CP和自己同城吗？'] == "同城":
         if df1['所在城市'] == df2['所在城市']:
             score += 10
     else:
         score += undecided_score
         
-    entertainment_1 = df1['娱乐偏好'].split(',')
-    entertainment_2 = df2['娱乐偏好'].split(',')
+    entertainment_1 = df1['娱乐偏好'].split('，')
+    entertainment_2 = df2['娱乐偏好'].split('，')
 
     same_entertainment = list(set(entertainment_1).intersection(entertainment_2))
     score += len(same_entertainment) * undecided_score
 
-    music_1 = df1['音乐偏好'].split(',')
-    music_2 = df2['音乐偏好'].split(',')
+    music_1 = df1['音乐偏好'].split('，')
+    music_2 = df2['音乐偏好'].split('，')
 
     same_music = list(set(music_1).intersection(music_2))
     score += len(same_music) * undecided_score
@@ -40,8 +40,8 @@ def score(index1, index2, df):
         if cat_dog_1 == "都好可爱" or (cat_dog_2 == "都好可爱"):
             score += undecided_score
 
-    personality_1 = df1['你的性格'].split(',')
-    personality_2 = df1['希望CP的性格是？'].split(',')
+    personality_1 = df1['你的性格'].split('，')
+    personality_2 = df1['希望CP的性格是？'].split('，')
     same_personality = list(set(personality_1).intersection(personality_2))
     score += len(same_personality) * undecided_score
 
@@ -88,7 +88,7 @@ def score(index1, index2, df):
         score += undecided_score
 
     age = int(df2['年龄'])
-    age_choice = df2['理想CP年龄'].split(',')
+    age_choice = df1['理想CP年龄'].split('，')
 
     matched = False
     for choice in age_choice:
@@ -100,8 +100,8 @@ def score(index1, index2, df):
             if 21 <= age <= 23:
                 matched = True
                 break
-        elif choice[:2] == '24':   
-            if 24 <= age <= 26:
+        elif choice[:2] == '24':
+            if 24 <= age <= 26: 
                 matched = True
                 break
         elif choice[:2] == '26':   
@@ -122,7 +122,7 @@ def score(index1, index2, df):
     return score
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-i', '--input_clean', help='The clean excel file')
+parser.add_argument('-i', '--input_clean',default='./data.xlsx', help='The clean excel file')
 parser.add_argument('-o', '--output', default='./score_matrix.json', 
         help='The name of the output file, default is score_matrix.json')
 args = parser.parse_args()
@@ -140,12 +140,5 @@ for i in tqdm(range(len(df))):
         score_ind.append(final_score)
     scores.append(score_ind)
 
-from gs import Gale_Shapley
-
-import numpy as np
-
-print(np.array(scores))
-pairs = Gale_Shapley(scores)
-print(pairs)
 with open(args.output, 'w') as f:
     json.dump(scores, f)
