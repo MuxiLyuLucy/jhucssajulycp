@@ -1,8 +1,8 @@
+from tabulate import tabulate
+from gs import Gale_Shapley
 import argparse, json 
 import pandas as pd 
 import numpy as np
-from tabulate import tabulate
-from gs import Gale_Shapley
 
 name = '姓名/昵称'
 gdr = '性别'
@@ -15,9 +15,11 @@ def print_short_info(idxes, df):
 def priority_pairing(df, scores):
     normal_cand_idxes = list(df[df['是否优先'] == 0].index)
     print('共{}个需要优先匹配的对象'.format(len(normal_cand_idxes)))
+    # Only subjects with priority can propose in the GS algorithm
     p_scores = np.array(scores)
     p_scores[normal_cand_idxes] = -2 * np.ones(p_scores[normal_cand_idxes].shape)
     p_pairs = Gale_Shapley(p_scores)
+    # Cross out already paired subjects
     paired_idxes = np.array(p_pairs).flatten()
     scores[paired_idxes, :] = -2
     scores[:, paired_idxes] = -2
@@ -25,6 +27,7 @@ def priority_pairing(df, scores):
 
 def normal_pairing(scores):
     n_pairs = Gale_Shapley(scores)
+    # Cross out already paired subjects
     paired_idxes = np.array(n_pairs).flatten()
     scores[paired_idxes, :] = -2
     scores[:, paired_idxes] = -2
@@ -32,8 +35,8 @@ def normal_pairing(scores):
 
 def manual_pairing(args, df, scores, unpaired_idxes, pairs):
     print('手动匹配:')
-    stop_pairing = False
     while len(unpaired_idxes) > 0:
+        # Find candidates for every unpaird subject
         candidates_list = get_candidates(unpaired_idxes, df)
 
         # Check if there's possibe couples left
@@ -44,28 +47,21 @@ def manual_pairing(args, df, scores, unpaired_idxes, pairs):
             print('无剩余可匹配cp')
             return
 
-        # Get first candidate
-        while True:
-            idx1 = input_idx(unpaired_idxes,'请输入第一个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', 'q')
-            if idx1 < 0:
-                return
-            elif len(candidates_list[idx1]) == 0:
-                print("所选对象无可匹配的候选人!")
-            else:
-                break
+        # Get first subject
+        idx1 = input_idx('请输入第一个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', 
+            lambda i : len(candidates_list[i]) != 0 and i in unpaired_idxes, 'q')
+        if idx1 < 0:
+            return
         
-        if stop_pairing:
-            break
-        
-        # Get second candidate
+        # Get second subject
         print('已选对象(第一行)及其可匹配对象:')
         candidates = candidates_list[idx1]
         print_short_info([idx1] + candidates, df)
-        idx2 = input_idx(candidates,'请输入第二个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', 'q')
+        idx2 = input_idx('请输入第二个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', lambda i : i in candidates, 'q')
         if idx2 < 0:
             return
 
-        # Update result and the unpaired 
+        # Update result and the unpaired subjects
         pairs += [(idx1, idx2)]
         unpaired_idxes.remove(idx1)
         unpaired_idxes.remove(idx2)        
@@ -79,8 +75,8 @@ def manual_pairing(args, df, scores, unpaired_idxes, pairs):
             elif user_input == 'n':
                 break
 
-
 def get_candidates(unpaired_idxes, df):
+    # Gender and gender preference must match
     candidates_list = {}
     for idx1 in unpaired_idxes:
         candiates = []
@@ -91,7 +87,7 @@ def get_candidates(unpaired_idxes, df):
             if((p1[g_pref]=='不限' or p1[g_pref]==p2[gdr]) and (p2[g_pref]=='不限' or p2[g_pref]==p1[gdr])):
                 candiates.append(idx2)
         candidates_list[idx1] = candiates
-
+    # Pring information
     candidates_info = []
     for idx, candidates in candidates_list.items():
         candidates_info.append([idx,df.loc[idx, name], len(candidates)])
@@ -100,8 +96,7 @@ def get_candidates(unpaired_idxes, df):
 
     return candidates_list
 
-    
-def input_idx(valid_vals, prompt_msg, stop_msg, stop_signal = None):
+def input_idx(prompt_msg, stop_msg, validity_check, stop_signal = None):
     while True:
         user_input = input(prompt_msg)
         if(user_input == stop_signal):
@@ -113,11 +108,10 @@ def input_idx(valid_vals, prompt_msg, stop_msg, stop_signal = None):
         except ValueError:
             print('无效输入！')
             continue
-        if i not in valid_vals:
-            print("无效序号!")    
-        else:
-            return i
-
+        if validity_check(i):
+            return i 
+        print("无效序号!")  
+            
 def save_result(output_file, pairs, df):
     with open(output_file, 'w', encoding='utf-8') as f:
         for p in pairs:
