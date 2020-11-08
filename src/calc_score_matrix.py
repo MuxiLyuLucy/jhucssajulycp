@@ -122,8 +122,8 @@ def score(index1, index2, df):
     return score
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-i', '--input_clean',default='./data.xlsx', help='The clean excel file')
-parser.add_argument('-o', '--output', default='./score_matrix.json', 
+parser.add_argument('-i', '--input_clean',default='../data/CP.xlsx', help='The clean excel file')
+parser.add_argument('-o', '--output', default='../data/score_matrix.json', 
         help='The name of the output file, default is score_matrix.json')
 args = parser.parse_args()
 df = pd.read_excel(args.input_clean)
