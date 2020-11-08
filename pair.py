@@ -1,6 +1,6 @@
 from tabulate import tabulate
 from gs import Gale_Shapley
-import argparse, json 
+import argparse, json, pickle, os
 import pandas as pd 
 import numpy as np
 
@@ -8,6 +8,7 @@ name = '姓名/昵称'
 gdr = '性别'
 g_pref = '意向CP性别'
 short_info_headers = [0,1,2,3,4,5,6,7,8,9]
+unfinished_result = 'unfinished.pkl'
 
 def print_short_info(idxes, df):
     print(tabulate(df.iloc[idxes, short_info_headers], headers='keys', tablefmt='psql'))
@@ -45,12 +46,14 @@ def manual_pairing(args, df, scores, unpaired_idxes, pairs):
             cand_sum += len(candidates)
         if cand_sum == 0:
             print('无剩余可匹配cp')
+            save_unfinished_result(pairs, unpaired_idxes)
             return
 
         # Get first subject
         idx1 = input_idx('请输入第一个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', 
             lambda i : len(candidates_list[i]) != 0 and i in unpaired_idxes, 'q')
         if idx1 < 0:
+            save_unfinished_result(pairs, unpaired_idxes)
             return
         
         # Get second subject
@@ -59,21 +62,14 @@ def manual_pairing(args, df, scores, unpaired_idxes, pairs):
         print_short_info([idx1] + candidates, df)
         idx2 = input_idx('请输入第二个匹配对象序号, 输入q停止手动匹配: ','已停止手动匹配', lambda i : i in candidates, 'q')
         if idx2 < 0:
+            save_unfinished_result(pairs, unpaired_idxes)
             return
 
         # Update result and the unpaired subjects
         pairs += [(idx1, idx2)]
         unpaired_idxes.remove(idx1)
-        unpaired_idxes.remove(idx2)        
-
-        # Save result
-        while True:
-            user_input = input('是否保存结果？y/n: ')
-            if user_input == 'y':
-                save_result(args.output, pairs, df)
-                break
-            elif user_input == 'n':
-                break
+        unpaired_idxes.remove(idx2)  
+    print('已匹配所有对象')      
 
 def get_candidates(unpaired_idxes, df):
     # Gender and gender preference must match
@@ -116,12 +112,31 @@ def save_result(output_file, pairs, df):
     with open(output_file, 'w', encoding='utf-8') as f:
         for p in pairs:
             f.write(df.loc[p[0], name] + ' ' + df.loc[p[1], name] + '\n')
-    print('已保存配对结果于{}'.format(output_file))
+        print('已保存配对结果于{}'.format(output_file))
+
+def save_unfinished_result(pairs, unpaired_idxes):
+    with open(unfinished_result, 'wb') as f:
+        data = {'pairs':pairs, 'unpaired_idxes': unpaired_idxes}
+        pickle.dump(data, f)
+
+def load_unfinished_result():
+    while True:
+        user_input = input('继续上次未完成配对？y/n: ')
+        if user_input == 'y':
+            if os.path.exists(unfinished_result):
+                with open(unfinished_result, 'rb') as f:
+                    return pickle.load(f)
+            else:
+                print('没有找到上次配对结果')
+            break
+        elif user_input == 'n':
+            os.remove(unfinished_result)
+            break
 
 def main():
     # Parser arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-ic', '--input_clean', default='./data.xlsx', help='The    clean excel file')
+    parser.add_argument('-ic', '--input_clean', default='./data.xlsx', help='The clean excel file')
     parser.add_argument('-s', '--score_matrix', default='./score_matrix.json',
             help='The score matrix file')
     parser.add_argument('-o', '--output', default='./output.txt', 
@@ -132,22 +147,28 @@ def main():
     df = pd.read_excel(args.input_clean)
     with open(args.score_matrix) as f:
         scores = np.array(json.load(f))
-    pairs = []
 
-    # Priority pairs
-    pairs += priority_pairing(df, scores)
-    print('优先匹配cp共{}对'.format(len(pairs)))
-    # Normal pairs
-    pairs += normal_pairing(scores)
-    print('自动匹配cp共{}对'.format(len(pairs)))
-    save_result(args.output, pairs, df)
+    # Try to load unfinished result first
+    data = load_unfinished_result()
+    if data is not None:
+        pairs, unpaired_idxes = data['pairs'], data['unpaired_idxes']
+    else:    
+        pairs = []
+        # Priority pairs
+        pairs += priority_pairing(df, scores)
+        print('优先匹配cp共{}对'.format(len(pairs)))
+        # Normal pairs
+        pairs += normal_pairing(scores)
+        print('自动匹配cp共{}对'.format(len(pairs)))
+        unpaired_idxes = set(np.arange(len(scores))) - set(np.array(pairs).flatten())
+
     # Manual pairing
-    unpaired_idxes = set(np.arange(len(scores))) - set(np.array(pairs).flatten())
     manual_pairing(args, df, scores, unpaired_idxes, pairs)
                
-    save_result(args.output, pairs, df) 
-    print('剩余未匹配对象:')
-    print_short_info(list(unpaired_idxes), df)
+    save_result(args.output, pairs, df)
+    if(len(unpaired_idxes) > 0): 
+        print('剩余未匹配对象:')
+        print_short_info(list(unpaired_idxes), df)
             
 if __name__ == "__main__":
     main()
