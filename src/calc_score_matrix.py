@@ -10,23 +10,40 @@ def score(index1, index2, df):
     score = 0
     undecided_score = 1
 
-    if df1['意向CP性别'] != df2['性别'] and df1['意向CP性别'] != '不限':
+    if df1['意向CP性别'] != df2['性别'] and df1['意向CP性别'] != '男┋女':
         return -2
 
-    if df1['希望CP和自己同城吗？'] == "同城":
-        if df1['所在城市'] == df2['所在城市']:
+    # if df1['希望CP和自己同城吗？'] == "同城":
+    #     if df1['所在城市'] == df2['所在城市']:
+    #         score += 10
+    # else:
+    #     score += undecided_score
+
+    if df1['您参加本活动的主要目的？'] != df2['您参加本活动的主要目的？']:
+        return -2
+
+    if df1['希望CP与自己同校吗'] == "同校":
+        if df1['学校'] == df2['学校']:
             score += 10
+        else:
+            return -2
+    elif df1['希望CP与自己同校吗'] == "异校":
+        if df1['学校'] != df2['学校']:
+            score += 10
+        else:
+            return -2
     else:
         score += undecided_score
+
         
-    entertainment_1 = df1['娱乐偏好'].split('，')
-    entertainment_2 = df2['娱乐偏好'].split('，')
+    entertainment_1 = df1['娱乐偏好'].split('┋')
+    entertainment_2 = df2['娱乐偏好'].split('┋')
 
     same_entertainment = list(set(entertainment_1).intersection(entertainment_2))
     score += len(same_entertainment) * undecided_score
 
-    music_1 = df1['音乐偏好'].split('，')
-    music_2 = df2['音乐偏好'].split('，')
+    music_1 = df1['音乐偏好'].split('┋')
+    music_2 = df2['音乐偏好'].split('┋')
 
     same_music = list(set(music_1).intersection(music_2))
     score += len(same_music) * undecided_score
@@ -37,20 +54,25 @@ def score(index1, index2, df):
     if cat_dog_1 == cat_dog_2:
         score += undecided_score
     else:
-        if cat_dog_1 == "都好可爱" or (cat_dog_2 == "都好可爱"):
+        if cat_dog_1 == "都喜欢" or (cat_dog_2 == "都喜欢"):
             score += undecided_score
 
-    personality_1 = df1['你的性格'].split('，')
-    personality_2 = df1['希望CP的性格是？'].split('，')
+    personality_1 = df1['你的性格'].split('┋')
+    personality_2 = df1['希望CP的性格是？'].split('┋')
     same_personality = list(set(personality_1).intersection(personality_2))
     score += len(same_personality) * undecided_score
 
+    rational_1 = df1['您认为自己是感性还是理性的？'].split('┋')
+    rational_2 = df1['您希望TA是感性还是理性的？'].split('┋')
+    same_rational = list(set(rational_1).intersection(rational_2))
+    score += len(same_rational) * undecided_score
+
     def handle_time(time):
-        if time[:1] == '3':
+        if time == "半小时左右":
             return 0
-        elif time[:1] == '0':
+        elif time == "半小时至一小时":
             return 1
-        elif time[:1] == '1':
+        elif time == "一小时至两小时":
             return 2
         else:
             return 3
@@ -74,42 +96,46 @@ def score(index1, index2, df):
     else:
         score += undecided_score
 
-    if df1['希望CP与自己同校吗'] == "同校":
-        if df1['学校'] == df2['学校']:
-            score += 10
-        else:
-            return -2
-    elif df1['希望CP与自己同校吗'] == "不同校":
-        if df1['学校'] != df2['学校']:
-            score += 10
-        else:
-            return -2
-    else:
-        score += undecided_score
+    if df1['你希望对方的Myers-Briggs性格类型与自己相同吗？'] == "希望":
+        if df1['你的Myers-Briggs性格类型'] != "(空)" and df2['你的Myers-Briggs性格类型'] != "(空)":
+            if df1['你的Myers-Briggs性格类型'] == df2['你的Myers-Briggs性格类型']:
+                score += 10
+            else:
+                score -= undecided_score
+    elif df1['你希望对方的Myers-Briggs性格类型与自己相同吗？'] == "不希望":
+        if df1['你的Myers-Briggs性格类型'] != "(空)" and df2['你的Myers-Briggs性格类型'] != "(空)":
+            if df1['你的Myers-Briggs性格类型'] != df2['你的Myers-Briggs性格类型'] and df1['你的Myers-Briggs性格类型'] != "(空)" and df2['你的Myers-Briggs性格类型'] != "(空)":
+                score += 10
+            else:
+                score -= undecided_score
 
-    age = int(df2['年龄'])
-    age_choice = df1['理想CP年龄'].split('，')
+    age = int(df2['年龄'][:2])
+    age_choice = df1['理想CP年龄'].split('┋')
 
     matched = False
     for choice in age_choice:
-        if choice[:2] == '17':
-            if 17 <= age <= 20:
+        if choice[:2] == '18':
+            if 18 <= age <= 19:
                 matched = True
                 break
-        elif choice[:2] == '21':   
-            if 21 <= age <= 23:
+        elif choice[:2] == '20':
+            if 20 <= age <= 22:
                 matched = True
                 break
-        elif choice[:2] == '24':
-            if 24 <= age <= 26: 
+        elif choice[:2] == '23':
+            if 23 <= age <= 25:
                 matched = True
                 break
         elif choice[:2] == '26':   
             if 26 <= age <= 28:
                 matched = True
                 break
-        elif choice[:2] == '28':   
-            if age >= 28:
+        elif choice[:2] == '29':
+            if 29 <= age <= 31:
+                matched = True
+                break
+        elif choice[:2] == '32':
+            if age >= 32:
                 matched = True
                 break
         else:

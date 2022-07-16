@@ -7,7 +7,7 @@ import numpy as np
 name = '姓名/昵称'
 gdr = '性别'
 g_pref = '意向CP性别'
-short_info_headers = [0,3,4,5,6,7,8]
+short_info_headers = [0,6,7,8,9,10,11,12]
 unfinished_result = '../data/unfinished.pkl'
 
 def print_short_info(idxes, df):
@@ -15,13 +15,19 @@ def print_short_info(idxes, df):
 
 def priority_pairing(df, scores):
     normal_cand_idxes = list(df[df['是否优先'] == 0].index)
+    print(len(scores))
+    print(len(normal_cand_idxes))
     print('共{}个需要优先匹配的对象'.format(len(scores) - len(normal_cand_idxes)))
     # Only subjects with priority can propose in the GS algorithm
     p_scores = np.array(scores)
+    print(normal_cand_idxes)
     p_scores[normal_cand_idxes] = -2 * np.ones(p_scores[normal_cand_idxes].shape)
     p_pairs = Gale_Shapley(p_scores)
     # Cross out already paired subjects
     paired_idxes = np.array(p_pairs).flatten()
+
+    print(paired_idxes)
+
     scores[paired_idxes, :] = -2
     scores[:, paired_idxes] = -2
     return p_pairs
